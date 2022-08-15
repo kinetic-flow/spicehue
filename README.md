@@ -12,6 +12,14 @@ Press the large button on the Hue Bridge (to ensure script has access) - only ne
 
 Launch spicehue.py.
 
+## Disclaimers
+
+Please use caution if you are sensitive to flashing lights.
+
+I will provide no support for this software, and I am not responsible for any possible damage to your hardware (networking equipment, Hue Bridge, Hue lamps).
+
+Hue API isn't really designed for low latency or rapidly changing colors / brightness. Not every transition will look good; you'll have to experiment.
+
 ## Advanced usage
 
 Instead of default.ini, you can specify a different INI file with --config flag.
