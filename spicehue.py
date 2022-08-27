@@ -10,6 +10,7 @@ import colorsys
 from configparser import RawConfigParser
 import argparse
 import time
+import fpstimer
 
 def config_lamps(hue_bridge, config):
     for hue_lamp in config.options('mapping'):
@@ -94,8 +95,6 @@ def update_hue_lamps(hue_bridge, overall_brightness, transition_time):
         # convert RGB to HSV
         hue, sat, val = colorsys.rgb_to_hsv(lamp.r, lamp.g, lamp.b)
 
-        now = time.time()
-
         # note: transitiontime is in deciseconds (0.1s)
         command = {
             'on': True,
@@ -107,8 +106,6 @@ def update_hue_lamps(hue_bridge, overall_brightness, transition_time):
 
         # print(f'{hue} {sat} {val}')
         hue_bridge.set_light(lamp_id, command)
-
-        print(time.time() - now)
 
     pass
 
@@ -131,9 +128,11 @@ def main():
     spice_host = config.get('spice', 'Host')
     spice_port = config.getint('spice', 'Port')
     spice_pass = config.get('spice', 'Password', fallback='')
-    sleep_interval = config.getfloat('misc', 'SleepInterval', fallback=20.0)
     overall_brightness = config.getint('hue', 'Brightness', fallback=100)
     transition_time = config.getint('hue', 'TransitionTime', fallback=1)
+
+    target_fps = config.getfloat('hue', 'Fps', fallback=4.0)
+    timer = fpstimer.FPSTimer(target_fps)
 
     print('Connect to Philips Hue bridge...')
     bridge_ip = config.get('hue', 'BridgeIp')
@@ -185,7 +184,7 @@ def main():
             if len(lights) > 0:
                 update_hue_lamps(hue_bridge, overall_brightness, transition_time)
 
-            sleep(sleep_interval / 1000)
+            timer.sleep()
             pass
     
     except KeyboardInterrupt:
