@@ -11,12 +11,12 @@ from configparser import RawConfigParser
 import argparse
 import time
 
-def config_lamps(config):
+def config_lamps(hue_bridge, config):
     for hue_lamp in config.options('mapping'):
         lights_raw = config.get('mapping', hue_lamp)
         lights = lights_raw.split(',')
         for light in lights:
-            add_lamp_mapping(hue_lamp, light)
+            add_lamp_mapping(hue_bridge, hue_lamp, light)
     pass
 
 class LampConfig(NamedTuple):
@@ -25,7 +25,7 @@ class LampConfig(NamedTuple):
     b: str
 
 class LampColor(NamedTuple):
-    name: str
+    lamp_id: str
     # 'r', 'g', or 'b'
     rgb: str
 
@@ -49,29 +49,24 @@ def connect_hue(bridge_ip):
 
     return b
 
-def get_hue_lamps(bridge):
-    hue_lamps = {}
-    for lamp_name in lamps_in_use.keys():
-        hue_lamp = bridge.get_light(lamp_name)
-        if 'name' not in hue_lamp or hue_lamp['name'] != lamp_name:
-             raise Exception(f'hue lamp with name {lamp_name} not found')
-        hue_lamps[lamp_name] = bridge.get_light(lamp_name)
-
-    return hue_lamps
-
-def lamps_on_off(bridge, hue_lamps, on=True):
-    for lamp_name in hue_lamps.keys():
-        bridge.set_light(lamp_name, 'on', on)
+def lamps_on_off(bridge, on=True):
+    for lamp_id in lamps_in_use.keys():
+        bridge.set_light(lamp_id, 'on', on)
 
 lamps_in_use = {}
 light_mapping = {}
 
-def add_lamp_mapping(lamp_name, light):
+def add_lamp_mapping(hue_bridge, lamp_name, light):
     print(f'    {light} [R/G/B] => {lamp_name}')
-    lamps_in_use[lamp_name] = LampStatus()
-    add_to_light_mapping(light + " R", LampColor(lamp_name, 'r'))
-    add_to_light_mapping(light + " G", LampColor(lamp_name, 'g'))
-    add_to_light_mapping(light + " B", LampColor(lamp_name, 'b'))
+
+    id = (int)(hue_bridge.get_light_id_by_name(lamp_name))
+    if not id:
+        return
+
+    lamps_in_use[id] = LampStatus()
+    add_to_light_mapping(light + " R", LampColor(id, 'r'))
+    add_to_light_mapping(light + " G", LampColor(id, 'g'))
+    add_to_light_mapping(light + " B", LampColor(id, 'b'))
 
 def add_to_light_mapping(light, lamp_color):
     if light not in light_mapping:
@@ -82,8 +77,8 @@ def connect_spice(host, port, password):
     return spiceapi.Connection(host, port, password)
 
 def update_hue_lamps(hue_bridge, overall_brightness, transition_time):
-    for lamp_name, lamp in lamps_in_use.items():
-        # print(f'{lamp_name} {lamp}')
+    for lamp_id, lamp in lamps_in_use.items():
+        # print(f'{lamp_id} {lamp}')
 
         # turn off the lamp for (0, 0, 0)
         if (lamp.r == 0 and lamp.g == 0 and lamp.b == 0):
@@ -93,11 +88,13 @@ def update_hue_lamps(hue_bridge, overall_brightness, transition_time):
                 'transitiontime': transition_time
             }
 
-            hue_bridge.set_light(lamp_name, command)
+            hue_bridge.set_light(lamp_id, command)
             continue
 
         # convert RGB to HSV
         hue, sat, val = colorsys.rgb_to_hsv(lamp.r, lamp.g, lamp.b)
+
+        now = time.time()
 
         # note: transitiontime is in deciseconds (0.1s)
         command = {
@@ -109,7 +106,10 @@ def update_hue_lamps(hue_bridge, overall_brightness, transition_time):
         }
 
         # print(f'{hue} {sat} {val}')
-        hue_bridge.set_light(lamp_name, command)
+        hue_bridge.set_light(lamp_id, command)
+
+        print(time.time() - now)
+
     pass
 
 def main():
@@ -140,11 +140,7 @@ def main():
     hue_bridge = connect_hue(bridge_ip)
 
     print('Mappings:')
-    config_lamps(config)
-    hue_lamps = get_hue_lamps(hue_bridge)
-    if len(hue_lamps) == 0:
-        print('ERROR: no mappings are specified, update the INI file and try again')
-        exit()
+    config_lamps(hue_bridge, config)
 
     con = None
     print('Start listening over SpiceAPI...')
@@ -164,7 +160,7 @@ def main():
                     print('Connection error')
                     if config.getboolean('hue', 'LightsOffOnError', fallback='True'):
                         print('Turning lights off...')
-                        lamps_on_off(hue_bridge, hue_lamps, False)
+                        lamps_on_off(hue_bridge, False)
                     con = None
             finally:
                 if con is None:
@@ -177,13 +173,13 @@ def main():
                     lamp_list = light_mapping[light_name]
                     for lamp_color in lamp_list:
                         rgb = lamp_color.rgb
-                        lamp_name = lamp_color.name
+                        lamp_id = lamp_color.lamp_id
                         if rgb == 'r':
-                            lamps_in_use[lamp_name].r = light[1]
+                            lamps_in_use[lamp_id].r = light[1]
                         elif rgb == 'g':
-                            lamps_in_use[lamp_name].g = light[1]
+                            lamps_in_use[lamp_id].g = light[1]
                         else:
-                            lamps_in_use[lamp_name].b = light[1]
+                            lamps_in_use[lamp_id].b = light[1]
                         pass
 
             if len(lights) > 0:
@@ -198,7 +194,7 @@ def main():
     finally:
         if config.getboolean('hue', 'LightsOffOnExit', fallback='True'):
             print('Turning lights off...')
-            lamps_on_off(hue_bridge, hue_lamps, False)
+            lamps_on_off(hue_bridge, False)
         print('Exiting...')
 
 if __name__ == "__main__":
