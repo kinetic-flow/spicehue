@@ -18,7 +18,7 @@ Please use caution if you are sensitive to flashing lights.
 
 I will provide no support for this software, and I am not responsible for any possible damage to your hardware (networking equipment, Hue Bridge, Hue lamps).
 
-Hue API isn't really designed for low latency or rapidly changing colors / brightness. Not every transition will look good; you'll have to experiment.
+Hue API isn't really designed for low latency or rapidly changing colors / brightness. Not every transition will look good; you'll have to experiment. Anything over 8-10 updates per second will cause color changes to "queue up" and lag behind. Trying to update many lights at once (repeatedly) often results in lights going out of sync with one another. This just seems to be a limitation of the Hue bridge hardware.
 
 ## Advanced usage
 
